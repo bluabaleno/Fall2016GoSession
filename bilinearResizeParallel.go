@@ -24,8 +24,7 @@ func resizing(input image.Image, name string, w, h int) error {
 	i := 0
 	for y := newImageModel.Bounds().Min.Y; y < newImageModel.Bounds().Max.Y; y++{
 		for x := newImageModel.Bounds().Min.X; x < newImageModel.Bounds().Max.X; x++{
-			topPixChannel := make(chan int, 4)
-			bottomPixChannel := make(chan int, 4)
+			SignalChannel := make(chan int, 2)
 
 			//Calculating horizontal ratios
 			coordX := ratioX * float32(x)
@@ -39,6 +38,11 @@ func resizing(input image.Image, name string, w, h int) error {
 
             leftRatio := 1 - distX
 			rightRatio := distX
+
+            var redTop int
+            var greenTop int
+            var blueTop int
+            var alphaTop int
 
 			//Interpolationg the top two pixels
 			go func() {
@@ -54,20 +58,22 @@ func resizing(input image.Image, name string, w, h int) error {
 	            leftAlpha := float32(a1/256)
 	            rightAlpha := float32(a2/256)
 
-	            redTop := int(leftRed * leftRatio + rightRed * rightRatio)
-	            greenTop := int(leftGreen * leftRatio + rightGreen * rightRatio)
-	            blueTop := int(leftBlue * leftRatio + rightBlue * rightRatio)
-	            alphaTop := int(leftAlpha * leftRatio + rightAlpha * rightRatio)
+	            redTop = int(leftRed * leftRatio + rightRed * rightRatio)
+	            greenTop = int(leftGreen * leftRatio + rightGreen * rightRatio)
+	            blueTop = int(leftBlue * leftRatio + rightBlue * rightRatio)
+	            alphaTop = int(leftAlpha * leftRatio + rightAlpha * rightRatio)
 
-	            topPixChannel <- redTop
-                topPixChannel <- greenTop
-                topPixChannel <- blueTop
-                topPixChannel <- alphaTop
+                SignalChannel <- 1;
 
-                close(topPixChannel)
         	}()
 
         	//Interpolating the bottom two pixels
+
+            var redBottom int
+            var greenBottom int
+            var blueBottom int
+            var alphaBottom int
+
             go func() {
                 r1,g1,b1,a1 := input.At(sampleAtX,sampleAtY+1).RGBA()
                 r2,g2,b2,a2 := input.At(sampleAtX+1, sampleAtY+1).RGBA()
@@ -81,19 +87,15 @@ func resizing(input image.Image, name string, w, h int) error {
                 leftAlpha := float32(a1/256)
                 rightAlpha := float32(a2/256)
 
-                redBottom := int(leftRed * leftRatio + rightRed * rightRatio)
-                greenBottom := int(leftGreen * leftRatio + rightGreen * rightRatio)
-                blueBottom := int(leftBlue * leftRatio + rightBlue * rightRatio)
-                alphaBottom := int(leftAlpha * leftRatio + rightAlpha * rightRatio)
+                redBottom = int(leftRed * leftRatio + rightRed * rightRatio)
+                greenBottom = int(leftGreen * leftRatio + rightGreen * rightRatio)
+                blueBottom = int(leftBlue * leftRatio + rightBlue * rightRatio)
+                alphaBottom = int(leftAlpha * leftRatio + rightAlpha * rightRatio)
 
-                bottomPixChannel <- redBottom
-                bottomPixChannel <- greenBottom
-                bottomPixChannel <- blueBottom
-                bottomPixChannel <- alphaBottom
-
-                close(bottomPixChannel)
+                SignalChannel <- 1;
             }()
 
+            <-SignalChannel
             // Calculating the ratio of the top and bottom ratios
             TopCenter := float32(math.Floor(float64(coordY) - 0.5) + 0.5)
             distY := coordY - TopCenter
@@ -101,27 +103,11 @@ func resizing(input image.Image, name string, w, h int) error {
             TopRatio := 1 - distY
             BottomRatio := distY
 
-			// renderPixChannel := make(chan int, 4)
+            renderRed := int(float32(redTop) * TopRatio + float32(redBottom) * BottomRatio)
+            renderGreen := int(float32(greenTop) * TopRatio + float32(greenBottom) * BottomRatio)
+            renderBlue := int(float32(blueTop) * TopRatio + float32(blueBottom) * BottomRatio)
+            renderAlpha := int(float32(alphaTop) * TopRatio + float32(alphaBottom) * BottomRatio)
 
-    		// for i := 0; i <= 4; i++ {
-    		// render := int(float32(<-topPixChannel) * TopRatio + float32(<-bottomPixChannel) * BottomRatio)
-    		// renderPixChannel <- render
-    		// }
-
-            renderRed := int(float32(<-topPixChannel) * TopRatio + float32(<-bottomPixChannel) * BottomRatio)
-            renderGreen := int(float32(<-topPixChannel) * TopRatio + float32(<-bottomPixChannel) * BottomRatio)
-            renderBlue := int(float32(<-topPixChannel) * TopRatio + float32(<-bottomPixChannel) * BottomRatio)
-            renderAlpha := int(float32(<-topPixChannel) * TopRatio + float32(<-bottomPixChannel) * BottomRatio)
-            // renderPixChannel <- renderRed
-            // renderPixChannel <- renderGreen
-            // renderPixChannel <- renderBlue
-            // renderPixChannel <- renderAlpha
-
-            // close(renderPixChannel)
-
-    		// for i := 0; i <= 4; i++{
-    		// newImageModel.Pix[i]  = byte(<-renderPixChannel)
-    		// }
             newImageModel.Pix[i] = byte(renderRed)
             newImageModel.Pix[i+1] = byte(renderGreen)
             newImageModel.Pix[i+2] = byte(renderBlue)
