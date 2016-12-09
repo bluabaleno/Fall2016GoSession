@@ -6,10 +6,11 @@ import "image"
 import "image/jpeg"
 import "strconv"
 import "math"
-
+import "time"
 
 func resizing(input image.Image, name string, w, h int) error {
-
+    
+    startTime := time.Now().Unix()
 
 	newImageModel := image.NewRGBA(image.Rect(0, 0, w, h))
 
@@ -21,10 +22,11 @@ func resizing(input image.Image, name string, w, h int) error {
 	ratioX := (float32(maxX)/float32(w))
 	ratioY := (float32(maxY)/float32(h))
 
+    SignalChannel := make(chan int, 2)
+
 	i := 0
 	for y := newImageModel.Bounds().Min.Y; y < newImageModel.Bounds().Max.Y; y++{
 		for x := newImageModel.Bounds().Min.X; x < newImageModel.Bounds().Max.X; x++{
-			SignalChannel := make(chan int, 2)
 
 			//Calculating horizontal ratios
 			coordX := ratioX * float32(x)
@@ -95,6 +97,8 @@ func resizing(input image.Image, name string, w, h int) error {
                 SignalChannel <- 1;
             }()
 
+
+            <-SignalChannel
             <-SignalChannel
             // Calculating the ratio of the top and bottom ratios
             TopCenter := float32(math.Floor(float64(coordY) - 0.5) + 0.5)
@@ -118,6 +122,12 @@ func resizing(input image.Image, name string, w, h int) error {
 		}
 	}
 
+    endTime := time.Now().Unix()
+
+    duration := endTime - startTime
+
+    fmt.Println(duration)
+
 	destFile, err := os.OpenFile(name, os.O_WRONLY|os.O_CREATE, os.ModePerm)
     if err != nil {
         return err
@@ -128,6 +138,7 @@ func resizing(input image.Image, name string, w, h int) error {
         return err
     }
     return nil
+
 
 }
 
